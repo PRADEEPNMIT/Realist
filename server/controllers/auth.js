@@ -19,6 +19,7 @@ export const preRegister = async (req, res) => {
       return res.json({ error: "A valid email is required" });
     }
     if (!password) {
+      return res.json({ err: "Password is mandatory" });
     }
     if (password && password.length < 6) {
       return res.json({ error: "Password should be atleast 6 characters" });
@@ -156,7 +157,7 @@ export const forgotPassword = async (req, res) => {
     );
   } catch (err) {
     console.log(err);
-    return res.json({ error: "Error occured in forgot passwor droute" });
+    return res.json({ error: "Error occured in forgot password route" });
   }
 };
 
@@ -184,3 +185,31 @@ export const accessAccount = async (req, res) => {
     return res.json({ error: err });
   }
 };
+
+export const refreshToken = async (req, res) => {
+  try {
+    const { _id } = jwt.verify(req.headers.refresh_token, config.JWT_SECRET);
+    const user = await User.find(_id);
+    const token = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+
+    const refreshToken = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    user.password = undefined;
+    user.resetCode = undefined;
+
+    return res.json({
+      token,
+      refreshToken,
+      user,
+    });
+  } catch (err) {
+    console.log(err);
+    return res.status(403).json({ error: "Refresh token failed" });
+  }
+};
+
+export const tokenAndUserResponse = () => {};
