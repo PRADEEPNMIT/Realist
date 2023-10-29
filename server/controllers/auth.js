@@ -97,8 +97,6 @@ export const login = async (req, res) => {
 
     //Find user by email
     const user = await User.findOne({ email });
-    console.log("Password 1 ", password);
-    console.log("hashed 1 ", user.password);
     //compare password
     const match = await comparePassword(password, user.password);
     if (!match) {
