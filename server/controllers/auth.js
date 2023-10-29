@@ -5,7 +5,6 @@ import { hashPassword, comparePassword } from "../helpers/auth.js";
 import User from "../models/user.js";
 import { nanoid } from "nanoid";
 import validator from "email-validator";
-import { compare } from "bcrypt";
 
 export const welcome = (req, res) => {
   res.json({
@@ -122,5 +121,66 @@ export const login = async (req, res) => {
   } catch (error) {
     console.log("Error occured in POST /login route ", err);
     return res.json({ error: "Some error occurred" });
+  }
+};
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.json({ error: "Could not find the user with email :", email });
+    }
+    const resetCode = nanoid(6);
+    user.resetCode = resetCode;
+    user.save();
+    const token = jwt.sign({ resetCode }, config.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+    config.AWS_SES.sendEmail(
+      emailTemplate(
+        email,
+        `<p>Please click the link below to access your account</p>
+                <a href="${config.CLIENT_URL}/auth/access-account/${token}"> Access my account</a>
+      `,
+        config.EMAIL_REPLY_TO,
+        `Access your account`
+      ),
+      (err, data) => {
+        if (err) {
+          return res.json({ ok: false });
+        } else {
+          return res.json({ ok: true });
+        }
+      }
+    );
+  } catch (err) {
+    console.log(err);
+    return res.json({ error: "Error occured in forgot passwor droute" });
+  }
+};
+
+export const accessAccount = async (req, res) => {
+  try {
+    const { resetCode } = jwt.verify(req.body.resetCode, config.JWT_SECRET);
+    const user = await User.findOneAndUpdate({ resetCode }, { resetCode: "" });
+    const token = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+
+    const refreshToken = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
+    user.password = undefined;
+    user.resetCode = undefined;
+
+    return res.json({
+      token,
+      refreshToken,
+      user,
+    });
+  } catch (err) {
+    return res.json({ error: err });
   }
 };
