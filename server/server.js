@@ -18,12 +18,11 @@ mongoose
 
 // middleware
 
+app.use(cors());
 app.use(express.json());
 
 app.use(morgan("dev"));
 app.use("/api", authRoutes);
-
-app.use(cors());
 
 app.listen(8000, () => {
   console.log("Running on 8000 port");

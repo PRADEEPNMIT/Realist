@@ -46,6 +46,12 @@ export const preRegister = async (req, res) => {
           console.log("Error ", err);
           return res.json({ ok: false });
         } else {
+          res.header("Access-Control-Allow-Origin", "*");
+          res.header(
+            "Access-Control-Allow-Headers",
+            "Origin, X-Requested-With, Content-Type, Accept"
+          );
+          console.log(res.headers);
           return res.json({ ok: true });
         }
       }
@@ -69,22 +75,7 @@ export const register = async (req, res) => {
       password: hashedPassword,
     }).save();
 
-    const token = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
-      expiresIn: "1h",
-    });
-
-    const refreshToken = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
-    user.password = undefined;
-    user.resetCode = undefined;
-
-    return res.json({
-      token,
-      refreshToken,
-      user,
-    });
+    return res.json(tokenAndUserResponse(user));
   } catch (err) {
     console.log("Error occured in POST /register route ", err);
     return res.json({ error: "Some error occurred" });
@@ -103,24 +94,9 @@ export const login = async (req, res) => {
       return res.json({ error: "Wrong password" });
     }
     //Create JWT and refresh token
-    const token = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
-      expiresIn: "1h",
-    });
-
-    const refreshToken = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-    //Send the response
-    user.password = undefined;
-    user.resetCode = undefined;
-
-    return res.json({
-      token,
-      refreshToken,
-      user,
-    });
+    return res.json(tokenAndUserResponse(user));
   } catch (error) {
-    console.log("Error occured in POST /login route ", err);
+    console.log("Error occured in POST /login route ", error);
     return res.json({ error: "Some error occurred" });
   }
 };
@@ -165,22 +141,7 @@ export const accessAccount = async (req, res) => {
   try {
     const { resetCode } = jwt.verify(req.body.resetCode, config.JWT_SECRET);
     const user = await User.findOneAndUpdate({ resetCode }, { resetCode: "" });
-    const token = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
-      expiresIn: "1h",
-    });
-
-    const refreshToken = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
-    user.password = undefined;
-    user.resetCode = undefined;
-
-    return res.json({
-      token,
-      refreshToken,
-      user,
-    });
+    return res.json(tokenAndUserResponse(user));
   } catch (err) {
     return res.json({ error: err });
   }
@@ -189,7 +150,7 @@ export const accessAccount = async (req, res) => {
 export const refreshToken = async (req, res) => {
   try {
     const { _id } = jwt.verify(req.headers.refresh_token, config.JWT_SECRET);
-    const user = await User.find(_id);
+    const user = await User.find({ _id });
     const token = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
       expiresIn: "1h",
     });
@@ -212,4 +173,84 @@ export const refreshToken = async (req, res) => {
   }
 };
 
-export const tokenAndUserResponse = () => {};
+export const currentUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    user.password = undefined;
+    user.resetCode = undefined;
+    res.json(user);
+  } catch (err) {
+    console.log(err);
+    return res.status(403).json({ error: "Unauthorised" });
+  }
+};
+
+export const publicProfile = async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username });
+    if (user) {
+      user.password = undefined;
+      user.resetCode = undefined;
+      return res.json({ user: user });
+    }
+  } catch (err) {
+    console.log(err);
+    return res.status(404).json({ err: "User not found" });
+  }
+};
+
+export const updatePassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.json({ err: "Password is required" });
+    }
+    if (password && password.length < 6) {
+      return res.json({ err: "Password should have 6 characters" });
+    }
+
+    const user = await User.findByIdAndUpdate(req.user._id, {
+      password: await hashPassword(password),
+    });
+
+    res.json({ ok: "true" });
+  } catch (err) {
+    console.log(err);
+    return res.json({});
+  }
+};
+
+export const updateProfile = async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(req.user._id, req.body, {
+      new: true,
+    });
+    user.password = undefined;
+    user.resetCode = undefined;
+    res.json(user);
+  } catch (err) {
+    if (err.codeName === "DuplicateKey") {
+      return res.json({ err: "Username is taken" });
+    }
+    console.log(err);
+  }
+};
+
+const tokenAndUserResponse = (user) => {
+  const token = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
+    expiresIn: "1h",
+  });
+
+  const refreshToken = jwt.sign({ _id: user._id }, config.JWT_SECRET, {
+    expiresIn: "7d",
+  });
+
+  user.password = undefined;
+  user.resetCode = undefined;
+
+  return {
+    token,
+    refreshToken,
+    user,
+  };
+};
